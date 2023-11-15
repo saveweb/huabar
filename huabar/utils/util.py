@@ -61,3 +61,29 @@ def auto_headers():
 
 def ran_jid():
     return random.choice(HOT_JIDS)
+
+
+ENABLE_TIMER = False
+
+# func call decorator timer
+class CallTimer:
+    def __call__(self, func):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            r = func(*args, **kwargs)
+            end_time = time.time()
+            if ENABLE_TIMER:
+                print(f"{func.__name__}() cost {end_time - start_time} seconds")
+            return r
+        return wrapper
+
+class AsyncCallTimer:
+    def __call__(self, func):
+        async def wrapper(*args, **kwargs):
+            start_time = time.time()
+            r = await func(*args, **kwargs)
+            end_time = time.time()
+            if ENABLE_TIMER:
+                print(f"{func.__name__}() cost {end_time - start_time} seconds")
+            return r
+        return wrapper
