@@ -36,7 +36,7 @@ async def get_size(sam: asyncio.Semaphore,servlet: Servlet, noteid: int):
 
 async def main():
 
-    # 平均从 1 到 19188202 选出约 X 个 noteid 测试
+    # 平均从 START 到 END 选出约 X 个 noteid 测试
     X = 500
     START = 1
     END = 19188202
