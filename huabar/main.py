@@ -218,6 +218,10 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
             update_task(c_notes_queue, TASK, Status.FAIL)
             continue
 
+        if "recomNotes" in r_json:
+            # 清空相关推荐
+            r_json["recomNotes"] = []
+
         # 3. update task
         insert_onte(c_notes, TASK.noteid, r_json, Status.DONE)
         print(f"DONE noteid: {TASK.noteid}, inserted", len(json.dumps(r_json, separators=(',', ':'), ensure_ascii=False))//1024, "KB payload")
