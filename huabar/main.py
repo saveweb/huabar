@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import datetime
+from datetime import datetime
 import json
 import os
 import pprint
@@ -9,7 +9,7 @@ from typing import Optional
 
 import httpx
 import pymongo
-from bson import ObjectId, Timestamp
+from bson import ObjectId
 from pymongo.database import Database
 from pymongo.collection import Collection
 import asyncio
@@ -38,8 +38,8 @@ class Task:
     noteid: int
     status: Status
 
-    claim_at: Optional[Timestamp] = None
-    update_at: Optional[Timestamp] = None
+    claim_at: Optional[datetime] = None
+    update_at: Optional[datetime] = None
 
 
     def __post_init__(self):
@@ -165,8 +165,6 @@ async def process_task(servlet: Servlet, TASK: Task) -> dict:
         raise ValueError("json decode error")
     return j_data
 
-    
-
 
 # 获取一个 task （TODO -> PROCESSING）
 @CallTimer()
@@ -177,8 +175,8 @@ def claim_task(queue: Collection, status: str = Status.TODO) -> Optional[Task]:
         filter={"status": status},
         update={"$set": {
             "status": Status.PROCESSING,
-            "claim_at": Timestamp(int(time.time()), 0),
-            "update_at": Timestamp(int(time.time()), 0),
+            "claim_at": datetime.utcnow(),
+            "update_at": datetime.utcnow(),
             }},
         sort=[("noteid", pymongo.ASCENDING)],
     )
@@ -195,7 +193,7 @@ def update_task(c_notes_queue: Collection, TASK: Task, status: str):
         filter={"_id": TASK._id},
         update={"$set": {
             "status": status,
-            "update_at": Timestamp(int(time.time()), 0),
+            "update_at": datetime.utcnow(),
         }},
     )
 
@@ -268,7 +266,7 @@ async def main():
                 print(f"max_noteid >= args.end_noteid: {max_noteid} >= {args.end_noteid}")
                 break
 
-            print(f"{datetime.datetime.now()} | will created {args.qos} TODO tasks: {max_noteid}->{max_noteid+1+args.qos}")
+            print(f"{datetime.now()} | will created {args.qos} TODO tasks: {max_noteid}->{max_noteid+1+args.qos}")
 
             init_queue(c_notes_queue, start_noteid=max_noteid+1, end_noteid=max_noteid+1+args.qos)
             t = 1 - (time.time() - last_op)
