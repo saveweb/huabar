@@ -198,6 +198,12 @@ def update_task(c_notes_queue: Collection, TASK: Task, status: str):
         }},
     )
 
+def verify_note_payload(payload: dict, noteid: str|int = ""):
+    assert "noteid" in payload
+    if noteid:
+        assert str(payload["noteid"]) == str(noteid)
+    assert "jid" in payload
+
 async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servlet):
     while not os.path.exists("stop"):
         # 1. claim a task
@@ -209,7 +215,8 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
 
         # 2. process task
         try:
-            payload_json = await download_payload(servlet, TASK)
+            payload = await download_payload(servlet, TASK)
+            verify_note_payload(payload)
         except Empty as e:
             print(e)
             update_task(c_notes_queue, TASK, Status.EMPTY)
@@ -219,13 +226,14 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
             update_task(c_notes_queue, TASK, Status.FAIL)
             continue
 
-        if "recomNotes" in payload_json:
+        if "recomNotes" in payload:
             # 清空相关推荐
-            payload_json["recomNotes"] = []
+            payload["recomNotes"] = []
 
         # 3. update task
-        insert_onte(c_notes, TASK.noteid, payload_json, Status.DONE)
-        print(f"DONE noteid: {TASK.noteid}, inserted", len(json.dumps(payload_json, separators=(',', ':'), ensure_ascii=False))//1024, "KB payload")
+        insert_onte(c_notes, TASK.noteid, payload, Status.DONE)
+        print(f"DONE noteid: {TASK.noteid}", "noteossurl:", payload.get("noteossurl"), "original_url:", payload.get("original_url"))
+        print(f"DONE noteid: {TASK.noteid}", "inserted", len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False)), "bytes payload")
         update_task(c_notes_queue, TASK, Status.DONE)
 
 @CallTimer()
