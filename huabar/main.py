@@ -218,11 +218,11 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
             payload = await download_payload(servlet, TASK)
             verify_note_payload(payload)
         except Empty as e:
-            print(e)
+            print(repr(e))
             update_task(c_notes_queue, TASK, Status.EMPTY)
             continue
         except Exception as e:
-            print(e)
+            print(repr(e))
             update_task(c_notes_queue, TASK, Status.FAIL)
             continue
 
@@ -257,7 +257,11 @@ def insert_onte(c_notes: Collection, noteid: int, payload: dict|None, status: st
 async def main():
     args = arg_parser()
 
-    h_client = httpx.AsyncClient()
+    transport = httpx.AsyncHTTPTransport(
+        retries=2
+    )
+
+    h_client = httpx.AsyncClient(transport=transport, timeout=12)
     h_client.headers.update(auto_headers())
     rq_ss = requests.Session()
     rq_ss.headers.update(auto_headers())
@@ -278,13 +282,19 @@ async def main():
             if max_noteid >= args.end_noteid:
                 print(f"max_noteid >= args.end_noteid: {max_noteid} >= {args.end_noteid}")
                 break
+            t = 1 - (time.time() - last_op)
+            await asyncio.sleep(t if t > 0 else 0)
+            last_op = time.time()
+
+            count_tasks_todo = c_notes_queue.count_documents(filter={"status": Status.TODO})
+            if count_tasks_todo > (args.qos * 50):
+                print(f"{datetime.now()} | too many TODO tasks: {count_tasks_todo}, waiting...")
+                await asyncio.sleep(10)
+                continue
 
             print(f"{datetime.now()} | will created {args.qos} TODO tasks: {max_noteid}->{max_noteid+1+args.qos}")
 
             init_queue(c_notes_queue, start_noteid=max_noteid+1, end_noteid=max_noteid+1+args.qos)
-            t = 1 - (time.time() - last_op)
-            await asyncio.sleep(t if t > 0 else 0)
-            last_op = time.time()
 
     c_notes: Collection = db.notes
     create_notes_index(c_notes)
