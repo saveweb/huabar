@@ -63,7 +63,7 @@ def ran_jid():
     return random.choice(HOT_JIDS)
 
 
-ENABLE_TIMER = False
+ENABLE_TIMER = True
 
 # func call decorator timer
 class CallTimer:
@@ -73,7 +73,7 @@ class CallTimer:
             r = func(*args, **kwargs)
             end_time = time.time()
             if ENABLE_TIMER:
-                print(f"{func.__name__}() cost {end_time - start_time} seconds")
+                print(f"{func.__name__}() cost", "%.2f s" % (end_time - start_time))
             return r
         return wrapper
 
@@ -84,6 +84,6 @@ class AsyncCallTimer:
             r = await func(*args, **kwargs)
             end_time = time.time()
             if ENABLE_TIMER:
-                print(f"{func.__name__}() cost {end_time - start_time} seconds")
+                print(f"{func.__name__}() cost", "%.2f s" % (end_time - start_time))
             return r
         return wrapper

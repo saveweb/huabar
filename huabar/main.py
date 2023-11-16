@@ -4,6 +4,7 @@ import json
 import os
 import pprint
 import argparse
+import random
 import time
 from typing import Optional
 
@@ -20,6 +21,7 @@ import requests
 
 END_NOTEID = (19188202 // 1000) * 1
 """ 控制队列 noteid 范围 """ # 别乱改哈
+DEBUG = False
 
 class Status:
     TODO = "TODO"
@@ -148,7 +150,7 @@ def arg_parser():
 
 
 @AsyncCallTimer()
-async def process_task(servlet: Servlet, TASK: Task) -> dict:
+async def download_payload(servlet: Servlet, TASK: Task) -> dict:
     print(f"processing noteid: {TASK.noteid}")
     r = await servlet.GetNoteInfo(jid=ran_jid(), noteid=TASK.noteid)
     
@@ -177,8 +179,7 @@ def claim_task(queue: Collection, status: str = Status.TODO) -> Optional[Task]:
             "status": Status.PROCESSING,
             "claim_at": datetime.utcnow(),
             "update_at": datetime.utcnow(),
-            }},
-        sort=[("noteid", pymongo.ASCENDING)],
+            }}
     )
     return Task(**TASK) if TASK else None
 
@@ -202,13 +203,13 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
         # 1. claim a task
         TASK = claim_task(c_notes_queue, status=Status.TODO)
         if not TASK:
-            print("no task to claim")
-            await asyncio.sleep(10)
+            print("no task to claim, waiting...")
+            await asyncio.sleep(random.randint(3, 10))
             continue
 
         # 2. process task
         try:
-            r_json = await process_task(servlet, TASK)
+            payload_json = await download_payload(servlet, TASK)
         except Empty as e:
             print(e)
             update_task(c_notes_queue, TASK, Status.EMPTY)
@@ -218,13 +219,13 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
             update_task(c_notes_queue, TASK, Status.FAIL)
             continue
 
-        if "recomNotes" in r_json:
+        if "recomNotes" in payload_json:
             # 清空相关推荐
-            r_json["recomNotes"] = []
+            payload_json["recomNotes"] = []
 
         # 3. update task
-        insert_onte(c_notes, TASK.noteid, r_json, Status.DONE)
-        print(f"DONE noteid: {TASK.noteid}, inserted", len(json.dumps(r_json, separators=(',', ':'), ensure_ascii=False))//1024, "KB payload")
+        insert_onte(c_notes, TASK.noteid, payload_json, Status.DONE)
+        print(f"DONE noteid: {TASK.noteid}, inserted", len(json.dumps(payload_json, separators=(',', ':'), ensure_ascii=False))//1024, "KB payload")
         update_task(c_notes_queue, TASK, Status.DONE)
 
 @CallTimer()
@@ -281,7 +282,7 @@ async def main():
     create_notes_index(c_notes)
     count_docs_init = c_notes_queue.count_documents(filter={})
     if count_docs_init == 0:
-        raise Exception("notes collection is empty, Wrong database?")
+        raise Exception("notes_queue collection is empty, Wrong database?")
 
 
 
@@ -290,7 +291,7 @@ async def main():
             c_notes=c_notes,
             c_notes_queue=c_notes_queue,
             servlet=servlet
-        )for _ in range(3)
+        )for _ in range(1 if DEBUG else 3)
     ]
 
     await asyncio.gather(*cors)
