@@ -13,6 +13,7 @@ import pymongo
 from bson import ObjectId
 from pymongo.database import Database
 from pymongo.collection import Collection
+import pymongo.errors
 import asyncio
 
 from huabar.utils.util import AsyncCallTimer, CallTimer, auto_headers, ran_jid
@@ -22,6 +23,8 @@ import requests
 END_NOTEID = (19188202 // 1000) * 1
 """ 控制队列 noteid 范围 """ # 别乱改哈
 DEBUG = False
+BASE_LATENCY = 0.2
+
 
 class Status:
     TODO = "TODO"
@@ -204,10 +207,19 @@ def verify_note_payload(payload: dict, noteid: str|int = ""):
         assert str(payload["noteid"]) == str(noteid)
     assert "jid" in payload
 
+async def latency_balance(latency: float):
+    """ 防止低延迟的机子跑太快 """
+    # print(f"latency: {latency}")
+    # return # no balance
+    await asyncio.sleep(BASE_LATENCY - latency if latency < BASE_LATENCY else 0)
+
 async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servlet):
     while not os.path.exists("stop"):
         # 1. claim a task
+        start_time = time.time()
         TASK = claim_task(c_notes_queue, status=Status.TODO)
+        latency = time.time() - start_time
+        await latency_balance(latency)
         if not TASK:
             print("no task to claim, waiting...")
             await asyncio.sleep(random.randint(3, 10))
@@ -220,10 +232,12 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
         except Empty as e:
             print(repr(e))
             update_task(c_notes_queue, TASK, Status.EMPTY)
+            await latency_balance(latency)
             continue
         except Exception as e:
             print(repr(e))
             update_task(c_notes_queue, TASK, Status.FAIL)
+            await latency_balance(latency)
             continue
 
         if "recomNotes" in payload:
@@ -232,9 +246,11 @@ async def worker(c_notes: Collection, c_notes_queue: Collection, servlet: Servle
 
         # 3. update task
         insert_onte(c_notes, TASK.noteid, payload, Status.DONE)
+        await latency_balance(latency)
         print(f"DONE noteid: {TASK.noteid}", "noteossurl:", payload.get("noteossurl"), "original_url:", payload.get("original_url"))
         print(f"DONE noteid: {TASK.noteid}", "inserted", len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False)), "bytes payload")
         update_task(c_notes_queue, TASK, Status.DONE)
+        await latency_balance(latency)
 
 @CallTimer()
 def insert_onte(c_notes: Collection, noteid: int, payload: dict|None, status: str):
@@ -247,11 +263,15 @@ def insert_onte(c_notes: Collection, noteid: int, payload: dict|None, status: st
     if status == Status.EMPTY:
         assert payload is None
 
-    c_notes.insert_one({
+    try:
+        c_notes.insert_one({
         "noteid": noteid,
         "status": status,
         "payload": payload,
     })
+    except pymongo.errors.DuplicateKeyError:
+        print(f"noteid: {noteid} already exists in c_notes")
+        pass
 
 
 async def main():
@@ -261,7 +281,7 @@ async def main():
         retries=2
     )
 
-    h_client = httpx.AsyncClient(transport=transport, timeout=12)
+    h_client = httpx.AsyncClient(transport=transport, timeout=120)
     h_client.headers.update(auto_headers())
     rq_ss = requests.Session()
     rq_ss.headers.update(auto_headers())
@@ -292,15 +312,18 @@ async def main():
                 await asyncio.sleep(10)
                 continue
 
-            print(f"{datetime.now()} | will created {args.qos} TODO tasks: {max_noteid}->{max_noteid+1+args.qos}")
+            print(f"{datetime.now()} | will created {args.qos} TODO tasks: {max_noteid}->{max_noteid+1+args.qos} |"
+                  "Now at %.2f%%" % (max_noteid / args.end_noteid * 100), end="\r")
 
             init_queue(c_notes_queue, start_noteid=max_noteid+1, end_noteid=max_noteid+1+args.qos)
+        print("task_provider stopped")
+        return
 
     c_notes: Collection = db.notes
-    create_notes_index(c_notes)
-    count_docs_init = c_notes_queue.count_documents(filter={})
-    if count_docs_init == 0:
-        raise Exception("notes_queue collection is empty, Wrong database?")
+    # create_notes_index(c_notes)
+    # count_docs_init = c_notes_queue.count_documents(filter={})
+    # if count_docs_init == 0:
+    #     raise Exception("notes_queue collection is empty, Wrong database?")
 
 
 
@@ -309,7 +332,7 @@ async def main():
             c_notes=c_notes,
             c_notes_queue=c_notes_queue,
             servlet=servlet
-        )for _ in range(1 if DEBUG else 3)
+        )for _ in range(1 if DEBUG else 5)
     ]
 
     await asyncio.gather(*cors)
