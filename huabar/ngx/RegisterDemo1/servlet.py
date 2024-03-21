@@ -2,7 +2,7 @@ import requests
 import httpx
 import json
 
-from huabar.ngx.define import NGX_HTTPS_PREFIX, NGX_HTTP_PREFIX
+from huabar.ngx.define import NGX_HTTPS_PREFIX, NGX_HTTP_PREFIX, S_HTTP_PREFIX, S_HTTPS_PREFIX
 
 class Servlet:
     client: httpx.AsyncClient
@@ -25,9 +25,11 @@ class Servlet:
         return:
 
             ["noteossurl"] 绘画过程数据，3D 没有，被删除的没有
+                "" # 空，需要走 GetNoteContent 获取，如 10417637
                 http://notecontent.oss-cn-hangzhou.aliyuncs.com/{noteid} # 早期
                 http://qncdn.haowanlab.com/19116313b2bbfd63948971e593f60c51
                 http://imax.vmall.com/resource/20140515/40d6cf0e-a8f7-40a9-b8be-f6637393eb8a.png?x-oss-process=style/picmax # 如 199197 的远古，已失效
+                http://oss-cn-hangzhou.aliyuncs.com/haowanlab/e26e54af070de2d76ad214e847e67033.data # “此作品已被删除，过程无法播放”
             ["3dcommodity"] 3D 模型信息
                 {"url": "http://ngx.haowanlab.com/3dshop/index.html?from=notedetail#/ModShopDetail/s_c_37","ctext": "同款模型"}
             ["elementid"] 3D 作品的 elementid
@@ -36,13 +38,17 @@ class Servlet:
                     http://ngx.haowanlab.com/3dshop/3dh5_share.html?eid={elementid}&jid={作者的jid}
                     不加作者 jid 的话没有音乐(?)
             ["original_url"] 为原图：
-                http://haowanlab.qiniudn.com/964206cba38d4cb7ba6411dac146bfba.png
+                http://haowanlab.qiniudn.com/964206cba38d4cb7ba6411dac146bfba.png # 替换为 http(s)://qncdn.haowanlab.com/ 可访问
                 http://qncdn.haowanlab.com/d0b42ecac71f7deee881e08db1554887
                 http://huaba-operate.oss-cn-hangzhou.aliyuncs.com/deletepic.png # note 被删除，远古帖子
+                http://haowanlab.oss.aliyuncs.com/967aae5243d682bffa474ddff5b4969b # 因 18 禁的原因被删除的帖子会显示这张图
             ["voice"] 为音乐:
                 http://qncdn.haowanlab.com/3cb2ea432cfd1d34943255f2308be23f.mp3
+            ["notestatus"]
+                0 正常
+                2 被删除（过程无法播放，但图片还在）如 19173235
         """
-        API = NGX_HTTP_PREFIX + "/RegisterDemo1/servlet/GetNoteInfo"
+        API = S_HTTP_PREFIX + "/RegisterDemo1/servlet/GetNoteInfo"
         params = {
             'noteid': noteid,
             'jid': jid,
@@ -76,7 +82,7 @@ class Servlet:
         返回:
             {"invcode": ...int...}
         """
-        API = NGX_HTTP_PREFIX + "/RegisterDemo1/servlet/GetInvcode"
+        API = S_HTTP_PREFIX + "/RegisterDemo1/servlet/GetInvcode"
         params = {
             'jid': jid,
         }
@@ -204,7 +210,7 @@ class Servlet:
                 "notenum": 19193888
             }
         """
-        API = NGX_HTTP_PREFIX + "/RegisterDemo1/servlet/GetAppreciation"
+        API = S_HTTP_PREFIX + "/RegisterDemo1/servlet/GetAppreciation"
         params = {
             "jid": jid,
             "actioninfo": actioninfo,
@@ -286,7 +292,7 @@ class Servlet:
             {"live_time":"画点可爱的","reqtype":"live_status","live_status":"end","live_url":"https://live.bilibili.com/h5/535017"}
             {一大坨不知道什么玩意，有很多用户的 jid}
         """
-        API = NGX_HTTPS_PREFIX + '/RegisterDemo1/servlet/SmallBusiness'
+        API = S_HTTPS_PREFIX + '/RegisterDemo1/servlet/SmallBusiness'
         data = {
             'jid': jid,
             'reqtype': reqtype,
